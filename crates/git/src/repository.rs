@@ -1099,8 +1099,9 @@ impl RealGitRepository {
             "opening git repository at {dotgit_path:?} using git binary {any_git_binary_path:?}"
         );
         let workdir_root = dotgit_path.parent().context(".git has no parent")?;
-        let repository =
-            git2::Repository::open(workdir_root).context("creating libgit2 repository")?;
+        let repository = git2::Repository::open(workdir_root)
+            .inspect_err(|e| log::error!("libgit2 failed to open {workdir_root:?}: {e}"))
+            .context("creating libgit2 repository")?;
         Ok(Self {
             repository: Arc::new(Mutex::new(repository)),
             system_git_binary_path,
@@ -3439,6 +3440,14 @@ impl GitBinary {
             command.env("GIT_INDEX_FILE", index_file_path);
         }
         command.envs(&self.envs);
+        log::debug!(
+            "git: {}",
+            std::iter::once(command.get_program())
+                .chain(command.get_args())
+                .map(|a| a.to_string_lossy())
+                .collect::<Vec<_>>()
+                .join(" ")
+        );
         command
     }
 }

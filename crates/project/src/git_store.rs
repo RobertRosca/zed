@@ -4501,7 +4501,7 @@ impl Repository {
                         cx,
                     )
                     .await
-                    .map_err(|err| err.to_string())
+                    .map_err(|err| format!("{:#}", err))
                 })
                 .shared();
             let job_sender = Repository::spawn_local_git_worker(state.clone(), cx);
@@ -7855,7 +7855,7 @@ impl Repository {
             }
             anyhow::Ok(())
         })
-        .detach_and_log_err(cx);
+        .detach_and_log_err_with_backtrace(cx);
 
         job_tx
     }
