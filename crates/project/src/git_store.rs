@@ -499,6 +499,7 @@ pub enum GitStoreEvent {
     RepositoryAdded,
     RepositoryRemoved(RepositoryId),
     IndexWriteError(anyhow::Error),
+    RepositoryOpenError(RepositoryId, anyhow::Error),
     JobsUpdated,
     ConflictsUpdated,
     GlobalConfigurationUpdated,
@@ -7797,7 +7798,22 @@ impl Repository {
         let (job_tx, mut job_rx) = mpsc::unbounded::<GitJob>();
 
         cx.spawn(async move |this, cx| {
-            let state = state.await.map_err(|err| anyhow::anyhow!(err))?;
+            let state = match state.await {
+                Ok(state) => state,
+                Err(err) => {
+                    this.update(cx, |repo, cx| {
+                        let id = repo.id;
+                        if let Some(git_store) = repo.git_store.upgrade() {
+                            let error = anyhow::anyhow!("{}", err);
+                            git_store.update(cx, |_, cx| {
+                                cx.emit(GitStoreEvent::RepositoryOpenError(id, error));
+                            });
+                        }
+                    })
+                    .ok();
+                    return Err(anyhow::anyhow!(err));
+                }
+            };
             if let Some(git_hosting_provider_registry) =
                 cx.update(|cx| GitHostingProviderRegistry::try_global(cx))
             {
