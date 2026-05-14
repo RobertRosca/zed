@@ -7855,7 +7855,7 @@ impl Repository {
             }
             anyhow::Ok(())
         })
-        .detach_and_log_err_with_backtrace(cx);
+        .detach_and_log_err(cx);
 
         job_tx
     }
