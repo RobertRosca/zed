@@ -1477,6 +1477,7 @@ struct FakeFsState {
     moves: std::collections::HashMap<u64, PathBuf>,
     job_event_subscribers: Arc<Mutex<Vec<JobEventSender>>>,
     trash: Vec<(TrashedEntry, FakeFsEntry)>,
+    simulated_open_errors: std::collections::HashMap<PathBuf, String>,
 }
 
 #[cfg(feature = "test-support")]
@@ -1763,6 +1764,7 @@ impl FakeFs {
                 moves: Default::default(),
                 job_event_subscribers: Arc::new(Mutex::new(Vec::new())),
                 trash: Vec::new(),
+                simulated_open_errors: Default::default(),
             })),
         });
 
@@ -2478,6 +2480,13 @@ impl FakeFs {
                 }
             }
         }).unwrap();
+    }
+
+    pub fn set_open_repo_error(&self, dot_git: &Path, error: String) {
+        self.state
+            .lock()
+            .simulated_open_errors
+            .insert(dot_git.to_owned(), error);
     }
 
     pub fn set_error_message_for_index_write(&self, dot_git: &Path, message: Option<String>) {
@@ -3238,6 +3247,15 @@ impl Fs for FakeFs {
         abs_dot_git: &Path,
         _system_git_binary: Option<&Path>,
     ) -> Result<Arc<dyn GitRepository>> {
+        if let Some(error) = self
+            .state
+            .lock()
+            .simulated_open_errors
+            .get(abs_dot_git)
+            .cloned()
+        {
+            anyhow::bail!(error);
+        }
         self.with_git_state_and_paths(
             abs_dot_git,
             false,
