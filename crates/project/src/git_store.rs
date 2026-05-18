@@ -387,6 +387,7 @@ pub struct Repository {
     askpass_delegates: Arc<Mutex<HashMap<u64, AskPassDelegate>>>,
     latest_askpass_id: u64,
     repository_state: Shared<Task<Result<RepositoryState, String>>>,
+    open_error: Option<String>,
     initial_graph_data: HashMap<(LogSource, LogOrder), InitialGitGraphData>,
     commit_data_handler: CommitDataHandlerState,
     commit_data: HashMap<Oid, CommitDataState>,
@@ -553,6 +554,7 @@ impl GitStore {
                                         let (job_sender, state) = (this.refetch_repo_state)(cx);
                                         this.repository_state = state;
                                         this.job_sender = job_sender;
+                                        this.open_error = None;
                                         this.schedule_scan(None, cx);
                                     }
                                 })
@@ -4441,10 +4443,7 @@ impl MergeDetails {
 
 impl Repository {
     pub fn error(&self) -> Option<String> {
-        match self.repository_state.peek() {
-            Some(Err(e)) => Some(e.clone()),
-            _ => None,
-        }
+        self.open_error.clone()
     }
 
     pub fn is_trusted(&self) -> bool {
@@ -4531,6 +4530,7 @@ impl Repository {
             snapshot,
             pending_ops: Default::default(),
             repository_state: state,
+            open_error: None,
             commit_message_buffer: None,
             askpass_delegates: Default::default(),
             paths_needing_status_update: Default::default(),
@@ -4587,6 +4587,7 @@ impl Repository {
             paths_needing_status_update: Default::default(),
             job_sender,
             repository_state,
+            open_error: None,
             askpass_delegates: Default::default(),
             latest_askpass_id: 0,
             active_jobs: Default::default(),
@@ -7809,6 +7810,7 @@ impl Repository {
                 Ok(state) => state,
                 Err(err) => {
                     this.update(cx, |repo, cx| {
+                        repo.open_error = Some(err.clone());
                         let id = repo.id;
                         if let Some(git_store) = repo.git_store.upgrade() {
                             let error = anyhow::anyhow!("{}", err);
